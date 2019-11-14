@@ -428,7 +428,7 @@ legend("topright", legend = c("OOB", "Test"), pch = 23, col = c("red", "blue"))
 
 
 ```{r}
-# Boosting (back to Ozone dataset!)
+# Boosting (continuing with glass dataset)
 
 # Set seed for reproducibility
 set.seed(17)
