@@ -22,7 +22,7 @@ library(tree)
 library(randomForest)
 library(MASS)
 library(gbm)
-
+library(mlbench)
 ```
 ## The Carseats Dataset 
 
@@ -188,7 +188,7 @@ dim(predmat)
 #Visualize Boosting Error Plot
 boost.err = with(boston[-train,], apply( (predmat - medv)^2, 2, mean) )
 plot(n.trees, boost.err, pch = 23, ylab = "Mean Squared Error", xlab = "# Trees", main = "Boosting Test Error")
-abline(h = min(test.err), col = "red")
+abline(h = min(boost.err), col = "red")
 
 ```
 
@@ -196,7 +196,262 @@ abline(h = min(test.err), col = "red")
 
 1. Attempt a regression tree-based method (not covered in this tutorial) on a reasonable dataset of your choice. Explain the results. 
 
+```{r}
+# Regression trees predict a continuous response variable, unlike classification trees, which predict a categorical response variable.
+
+# Load relevant libraries.
+library(rpart)
+library(rpart.plot)
+
+# Let's see if we can use a regression tree to estimate a chick's weight based on its other attributes.
+
+# Load data and view summary.
+data(ChickWeight)
+cw <- ChickWeight
+summary(cw)
+
+# Remove Chick ID because we don't expect this to be correlated with weight.
+cw$Chick <- NULL
+
+# Set seed for reproducibility.
+set.seed(17)
+
+# Split data into train and test sets (70:30, or 405:173, respectively)
+cw_train <- sample(1:nrow(cw), 405)
+
+# Create the model using the training set.
+  # We tell rpart to predict weight based on all the other attributes.
+    # The most useful predictors are automatically selected/kept.
+  # We tell rpart to use the data in our training set.
+  # We use the anova method because our response variable of interest is numerical.
+cw_model <- rpart(weight~., data=cw[cw_train,], method="anova")
+
+# View splitting results.
+# rpart preserved both Time and Diet as useful predictors, which is good.
+# Each number along the left indicates a node.
+  # The first item at each node indicates how the branch is split.
+  # The second item at each node indicates how many observations fell under this split.
+  # The third item at each node indicates the deviance.
+  # The last item at each node indicates the value of the variable of interest.
+# Each asterisk along the right indicates a leaf node.
+cw_model
+
+# View cptable (complexity parameter table)
+printcp(cw_model)
+plotcp(cw_model)
+
+# In the table, the first column is the complexity parameter (CP), which shows the benefit of adding each split. The tree stops dividing once the benefit hits 0.01.
+# In the table, the fourth column is the cross-validation error (xerror), which follows similar rules as CP. If xerror stops decreasing, decreases a neglible amount, or increases, the tree stops dividing.
+# In the plot, the first point (and its error bar) that dips below the dotted horizontal line tells us how many splits to make. The 5th point (and its error bar) is the first to dip below this line, which is why our tree in the next part has 5 splits (aka decision nodes).
+
+# Visualize the tree.
+  # We want to plot our cw_model.
+  # We choose type 3 style of plotting.
+  # We ask for 3 significant figures.
+  # We set fallen.leaves=TRUE to position leaf nodes at the bottom.
+rpart.plot(cw_model, type=3, digits=3, fallen.leaves=TRUE)
+
+# Split by Time (age in days),
+  # Chicks younger than 13 days. Split is by Time,
+    # Chicks younger than 7 days,*
+    # Chicks 7 days or older. Split is by Time.
+      # Chicks younger than 11 days.*
+      # Chicks 11 days or older.*
+  # Chicks 13 days or older. Split by Diet.
+    # Chicks on diet type 1.*
+    # Chicks on diet types 2, 3, and 4. Split by Time.
+      # Chicks younger than 17 days.*
+      # Chicks 17 days or older.*
+
+# Make a prediction for each chick in the test set.
+cw_pred <- predict(cw_model, cw[-cw_train,])
+
+# Calculate mean absolute error (MAE) to see how our model performed.
+# This takes the absolute difference between each pair and averages it.
+# Lower MAE indicates better fit.
+cw_MAE <- mean(abs(cw[-cw_train,]$weight-cw_pred))
+
+# RESULTS: Our MAE is 27, which means the average difference between the actual weights and predicted weights in the test set is 27g (same units as original). However, given that the minimum weight is 35g and the maximum weight is 373g, MAE of 27 is not terrible.
+```
+
+```{r}
+# Out of curiosity and for more practice, I make a regression tree for BostonHousing to try and predict median value from other attributes.
+
+# Load data and view summary.
+data(BostonHousing)
+bh <- BostonHousing
+summary(bh)
+
+# Set seed for reproducibility.
+set.seed(17)
+
+# Split data into train and test sets (70:30, or 354:152, respectively)
+bh_train <- sample(1:nrow(bh), 354)
+
+# Create the model using the training set.
+  # We tell rpart to predict medv based on all the other attributes.
+    # The most useful predictors are automatically selected/kept.
+  # We tell rpart to use the data in our training set.
+  # We use the anova method because our response variable of interest is numerical.
+bh_model <- rpart(medv~., data=bh[bh_train,], method="anova")
+
+# View splitting results.
+# rpart preserved both Time and Diet as useful predictors, which is good.
+# Each number along the left indicates a node.
+  # The first item at each node indicates how the branch is split.
+  # The second item at each node indicates how many observations fell under this split.
+  # The third item at each node indicates the deviance.
+  # The last item at each node indicates the value of the variable of interest.
+# Each asterisk along the right indicates a leaf node.
+bh_model
+
+# View cptable (complexity parameter table)
+printcp(bh_model)
+plotcp(bh_model)
+
+# In the table, the first column is the complexity parameter (CP), which shows the benefit of adding each split. The tree stops dividing once the benefit hits 0.01.
+# In the table, the fourth column is the cross-validation error (xerror), which follows similar rules as CP. If xerror stops decreasing, decreases a neglible amount, or increases, the tree stops dividing.
+# In the plot, the first point (and its error bar) that dips below the dotted horizontal line tells us how many splits to make. The 8th point (and its error bar) is the first to dip below this line, which is why our tree in the next part has 8 splits (aka decision nodes).
+
+# Visualize the tree.
+  # We want to plot our cw_model.
+  # We choose type 3 style of plotting.
+  # We ask for 3 significant figures.
+  # We set fallen.leaves=TRUE to position leaf nodes at the bottom.
+rpart.plot(bh_model, type=3, digits=3, fallen.leaves=TRUE)
+
+# Make a prediction for each observation in the test set.
+bh_pred <- predict(bh_model, bh[-bh_train,])
+
+# Calculate mean absolute error (MAE) to see how our model performed.
+# This takes the absolute difference between each pair and averages it.
+# Lower MAE indicates better fit.
+bh_MAE <- mean(abs(bh[-bh_train,]$medv-bh_pred))
+
+# RESULTS: Our MAE is 3.3, which I would consider pretty good. The tree is much more interesting since it is split more times on more variables.
+```
+
+
 2. Attempt both a bagging and boosting method on a reasonable dataset of your choice. Explain the results.
 
+```{r}
+# Load Ozone dataset. Let's see if we can predict daily maximum one-hour-average ozone reading from other attributes. Documentation for each variable can be found here:
+# https://cran.r-project.org/web/packages/mlbench/mlbench.pdf
+data(Ozone)
+oz <- Ozone
+oz <- na.omit(oz)
+head(Ozone)
+```
 
 
+```{r}
+# Bagging
+
+# Set seed for reproducibility
+set.seed(17)
+
+# Split data into train and test sets (70:30, or 142:61, respectively)
+oz_train = sample(1:nrow(oz), 142)
+
+# Fit training subset of data to model 
+oz_rf = randomForest(V4~., data = oz, subset = oz_train)
+oz_rf
+
+# Number of trees = 500
+# Number of variables tried at each split = 4
+# Mean of squared residuals = 19.88
+# % Variance explained = 69.59
+
+# Vary the number of variables randomly selected.
+oob_err = double(12)
+test_err = double(12)
+
+# In a loop of mtry from 1 to 12, you first fit the randomForest to the train dataset
+for(mtry in 1:12){
+  oz_fit = randomForest(V4~., data = oz, subset=oz_train, mtry=mtry, ntree = 350)
+  oob_err[mtry] = oz_fit$mse[350] # Extract mean-squared-error 
+  pred = predict(oz_fit, oz[-oz_train,]) # Predict on test dataset
+  test_err[mtry] = with(oz[-oz_train,], mean( (V4-pred)^2 )) # Compute test error
+}
+
+# Visualize 
+matplot(1:mtry, cbind(test_err, oob_err), pch = 23, col = c("red", "blue"), type = "b", ylab="Mean Squared Error")
+legend("topright", legend = c("OOB", "Test"), pch = 23, col = c("red", "blue"))
+
+# RESULTS:
+# I don't think bagging worked very well on this dataset. The best (least) mean squared error is observed when we use only 1-2 variables. The MSE only increases as we include more variables. Though the shape of the OOB MSE line mimicked the test MSE line pretty well, the OOB had higher (worse) MSE.
+```
+
+```{r}
+# Bagging (cont.)
+# I tried a few more datasets until I found one that improves with more variables selected.
+
+# The Glass dataset has columns for refractive index, composition, and type.
+# Let's see if we can predict RI from other attributes.
+data(Glass)
+gl <- Glass
+head(gl)
+
+# Set seed for reproducibility
+set.seed(17)
+
+# Split data into train and test sets (70:30, or 150:64, respectively)
+gl_train = sample(1:nrow(gl), 150)
+
+# Fit training subset of data to model
+gl_rf = randomForest(RI~., data = gl, subset = gl_train)
+gl_rf
+
+# Number of trees = 500
+# Number of variables tried at each split = 3
+# Mean of squared residuals = 2.85e-06
+# % Variance explained = 71.3
+
+# Vary the number of variables randomly selected.
+oob_err = double(9)
+test_err = double(9)
+
+# In a loop of mtry from 1 to 9, you first fit the randomForest to the train dataset
+for(mtry in 1:9){
+  gl_fit = randomForest(RI~., data = gl, subset=gl_train, mtry=mtry, ntree = 350)
+  oob_err[mtry] = gl_fit$mse[350] # Extract mean-squared-error 
+  pred = predict(gl_fit, gl[-gl_train,]) # Predict on test dataset
+  test_err[mtry] = with(gl[-gl_train,], mean( (RI-pred)^2 )) # Compute test error
+}
+
+# Visualize 
+matplot(1:mtry, cbind(test_err, oob_err), pch = 23, col = c("red", "blue"), type = "b", ylab="Mean Squared Error")
+legend("topright", legend = c("OOB", "Test"), pch = 23, col = c("red", "blue"))
+
+# RESULTS: The model did not predict for the test set very well, but at least increasing variables does improve the MSE of the model by making the tree less complex.
+```
+
+
+```{r}
+# Boosting (back to Ozone dataset!)
+
+# Set seed for reproducibility
+set.seed(17)
+
+# Gradient Boosting Model
+gl_boost = gbm(RI~., data = gl[gl_train,], distribution = "gaussian", n.trees = 10000, shrinkage = 0.01, interaction.depth = 4)
+
+# Variable Importance Plot
+summary(gl_boost)
+
+# Visualize important variables of interest
+plot(gl_boost,i="Ca")
+plot(gl_boost,i="Si")
+
+# Predict on test set
+n_trees = seq(from = 100, to = 10000, by = 100)
+gl_predmat = predict(gl_boost, newdata = gl[-gl_train,], n.trees = n_trees)
+dim(gl_predmat)
+
+# Visualize Boosting Error Plot
+boost_err = with(gl[-gl_train,], apply( (gl_predmat - RI)^2, 2, mean) )
+plot(n_trees, boost_err, pch = 23, ylab = "Mean Squared Error", xlab = "# Trees", main = "Boosting Test Error")
+abline(h = min(boost_err), col = "red")
+
+# RESULTS: Based on summary(gl_boost), Ca and Si are most important for predicting refractive index of glass. Graphing our two most important variables of interest (Ca and Si) against the dependent variable of interest (RI), we see that RI tends to increase with increasing Ca, and RI tends to decrease with increasing Si. We use our model to predict for the test set, then verify that the length of the predicted values match the length of our test set with dim(gl_predmat). Finally, we look at our MSE vs. # Trees plot. We see that our model performs best when we have ~1000 trees, since the MSE is lowest at this point.
+```
